@@ -58,6 +58,8 @@ module tblite_basis_type
       real(wp) :: min_alpha = huge(0.0_wp)
       !> Number of shells for each species
       integer, allocatable :: nsh_id(:)
+      !> Index offset for each unique shell
+      integer, allocatable :: ish_id(:)
       !> Number of shells for each atom
       integer, allocatable :: nsh_at(:)
       !> Number of spherical atomic orbitals for each shell
@@ -102,6 +104,13 @@ subroutine new_basis(self, mol, nshell, cgto, acc)
    self%nsh_id = nshell
    self%cgto = cgto
    self%intcut = integral_cutoff(acc)
+
+   ! Create mapping between species and unique shells
+   ii = 0
+   do isp = 1, mol%nid
+      self%ish_id(isp) = ii
+      ii = ii + self%nsh_id(isp)
+   end do
 
    ! Make count of shells for each atom
    self%nsh_at = nshell(mol%id)

@@ -733,17 +733,19 @@ subroutine get_hscale(self, mol, bas, hscale)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Scaling parameters for the Hamiltonian elements
-   real(wp), intent(out) :: hscale(:, :, :, :)
+   real(wp), intent(out) :: hscale(:, :)
 
-   integer :: isp, jsp, izp, jzp, ish, jsh, il, jl
+   integer :: isp, jsp, izp, jzp, ish, jsh, il, jl, iu, ju
    real(wp) :: zi, zj, zij, den, enp, km
 
-   hscale(:, :, :, :) = 0.0_wp
+   hscale(:, :) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do jsp = 1, mol%nid
          jzp = mol%num(jsp)
+         ju = bas%ish_id(jsp)
          den = (get_pauling_en(izp) - get_pauling_en(jzp))**2
          do ish = 1, bas%nsh_id(isp)
             il = bas%cgto(ish, isp)%ang
@@ -754,7 +756,7 @@ subroutine get_hscale(self, mol, bas, hscale)
                zij = (2*sqrt(zi*zj)/(zi+zj))**wexp
                enp = 1.0_wp + enscale * den
                km = self%kpair(jsp, isp) * self%kshell(jl, il) * enp
-               hscale(jsh, ish, jsp, isp) = zij * km
+               hscale(ju+jsh, iu+ish) = zij * km
             end do
          end do
       end do
@@ -771,16 +773,17 @@ subroutine get_selfenergy(self, mol, bas, selfenergy)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Self energy / atomic levels
-   real(wp), intent(out) :: selfenergy(:, :)
+   real(wp), intent(out) :: selfenergy(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   selfenergy(:, :) = 0.0_wp
+   selfenergy(:) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         selfenergy(ish, isp) = p_selfenergy(ish, izp)
+         selfenergy(iu+ish) = p_selfenergy(ish, izp)
       end do
    end do
 end subroutine get_selfenergy
@@ -795,16 +798,17 @@ subroutine get_cnshift(self, mol, bas, kcn)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Coordination number dependent shift
-   real(wp), intent(out) :: kcn(:, :)
+   real(wp), intent(out) :: kcn(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   kcn(:, :) = 0.0_wp
+   kcn(:) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         kcn(ish, isp) = p_kcn(bas%cgto(ish, isp)%ang, izp)
+         kcn(iu+ish) = p_kcn(bas%cgto(ish, isp)%ang, izp)
       end do
    end do
 end subroutine get_cnshift
@@ -819,16 +823,17 @@ subroutine get_shpoly(self, mol, bas, shpoly)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Polynomial parameters for distant dependent scaleing
-   real(wp), intent(out) :: shpoly(:, :)
+   real(wp), intent(out) :: shpoly(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   shpoly(:, :) = 0.0_wp
+   shpoly(:) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         shpoly(ish, isp) = p_shpoly(bas%cgto(ish, isp)%ang, izp)
+         shpoly(iu+ish) = p_shpoly(bas%cgto(ish, isp)%ang, izp)
       end do
    end do
 end subroutine get_shpoly
@@ -842,16 +847,17 @@ subroutine get_reference_occ(self, mol, bas, refocc)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Reference occupation numbers
-   real(wp), intent(out) :: refocc(:, :)
+   real(wp), intent(out) :: refocc(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   refocc(:, :) = 0.0_wp
+   refocc(:) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         refocc(ish, isp) = reference_occ(bas%cgto(ish, isp)%ang, izp)
+         refocc(iu+ish) = reference_occ(bas%cgto(ish, isp)%ang, izp)
       end do
    end do
 end subroutine get_reference_occ
@@ -863,17 +869,18 @@ subroutine get_hubbard_derivs(mol, bas, hubbard_derivs)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Shell resolved Hubbard derivatives
-   real(wp), allocatable, intent(out) :: hubbard_derivs(:, :)
+   real(wp), allocatable, intent(out) :: hubbard_derivs(:)
 
-   integer :: isp, izp, ish, il
+   integer :: isp, izp, ish, il, iu
 
-   allocate(hubbard_derivs(maxval(bas%nsh_id), mol%nid))
-   hubbard_derivs(:, :) = 0.0_wp
+   allocate(hubbard_derivs(sum(bas%nsh_id)))
+   hubbard_derivs(:) = 0.0_wp
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
          il = bas%cgto(ish, isp)%ang
-         hubbard_derivs(ish, isp) = p_hubbard_derivs(izp) * shell_hubbard_derivs(il)
+         hubbard_derivs(iu+ish) = p_hubbard_derivs(izp) * shell_hubbard_derivs(il)
       end do
    end do
 end subroutine get_hubbard_derivs

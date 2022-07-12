@@ -62,7 +62,7 @@ module tblite_xtb_spec
          !> Basis set information
          type(basis_type), intent(in) :: bas
          !> Scaling parameters for the Hamiltonian elements
-         real(wp), intent(out) :: hscale(:, :, :, :)
+         real(wp), intent(out) :: hscale(:, :)
       end subroutine get_hscale
 
       !> Generator for the self energy / atomic levels of the Hamiltonian
@@ -75,7 +75,7 @@ module tblite_xtb_spec
          !> Basis set information
          type(basis_type), intent(in) :: bas
          !> Self energy / atomic levels
-         real(wp), intent(out) :: selfenergy(:, :)
+         real(wp), intent(out) :: selfenergy(:)
       end subroutine get_selfenergy
 
       !> Generator for the polynomial parameters for the distant dependent scaling
@@ -88,7 +88,7 @@ module tblite_xtb_spec
          !> Basis set information
          type(basis_type), intent(in) :: bas
          !> Polynomial parameters for distant dependent scaleing
-         real(wp), intent(out) :: shpoly(:, :)
+         real(wp), intent(out) :: shpoly(:)
       end subroutine get_shpoly
 
       !> Generator for the reference occupation numbers of the atoms
@@ -101,7 +101,7 @@ module tblite_xtb_spec
          !> Basis set information
          type(basis_type), intent(in) :: bas
          !> Reference occupation numbers
-         real(wp), intent(out) :: refocc(:, :)
+         real(wp), intent(out) :: refocc(:)
       end subroutine get_reference_occ
    end interface
 
@@ -117,9 +117,9 @@ subroutine get_cnshift(self, mol, bas, kcn)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Coordination number dependent shift
-   real(wp), intent(out) :: kcn(:, :)
+   real(wp), intent(out) :: kcn(:)
 
-   kcn(:, :) = 0.0_wp
+   kcn(:) = 0.0_wp
 end subroutine get_cnshift
 
 
@@ -132,9 +132,9 @@ subroutine get_q1shift(self, mol, bas, kq1)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Linear partial charge dependent shift
-   real(wp), intent(out) :: kq1(:, :)
+   real(wp), intent(out) :: kq1(:)
 
-   kq1(:, :) = 0.0_wp
+   kq1(:) = 0.0_wp
 end subroutine get_q1shift
 
 
@@ -147,9 +147,9 @@ subroutine get_q2shift(self, mol, bas, kq2)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Quadratic partial charge dependent shift
-   real(wp), intent(out) :: kq2(:, :)
+   real(wp), intent(out) :: kq2(:)
 
-   kq2(:, :) = 0.0_wp
+   kq2(:) = 0.0_wp
 end subroutine get_q2shift
 
 

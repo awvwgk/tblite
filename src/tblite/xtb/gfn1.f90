@@ -494,7 +494,7 @@ module tblite_xtb_gfn1
    type, public, extends(tb_h0spec) :: gfn1_h0spec
       real(wp) :: kshell(0:2, 0:2)
       real(wp), allocatable :: kpair(:, :)
-      logical, allocatable :: valence(:, :)
+      logical, allocatable :: valence(:)
    contains
       !> Generator for the self energy / atomic levels of the Hamiltonian
       procedure :: get_selfenergy
@@ -680,7 +680,7 @@ pure function new_gfn1_h0spec(mol) result(self)
    !> Instance of the Hamiltonian specification
    type(gfn1_h0spec) :: self
 
-   integer :: isp, jsp, il, jl, izp, ish
+   integer :: isp, jsp, il, jl, izp, ish, iu
    integer :: ang_idx(0:2)
 
    allocate(self%kpair(mol%nid, mol%nid))
@@ -696,15 +696,17 @@ pure function new_gfn1_h0spec(mol) result(self)
       end do
    end do
 
-   allocate(self%valence(3, mol%nid))
+   allocate(self%valence(sum(nshell)))
+   iu = 0
    do isp = 1, mol%nid
       ang_idx = 0
       izp = mol%num(isp)
       do ish = 1, nshell(izp)
          il = ang_shell(ish, izp)
-         self%valence(ish, isp) = ang_idx(il) == 0
-         if (self%valence(ish, isp)) ang_idx(il) = ish
+         self%valence(iu+ish) = ang_idx(il) == 0
+         if (self%valence(iu+ish)) ang_idx(il) = ish
       end do
+      iu = iu + nshell(izp)
    end do
 
 end function new_gfn1_h0spec
@@ -767,33 +769,35 @@ subroutine get_hscale(self, mol, bas, hscale)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Scaling parameters for the Hamiltonian elements
-   real(wp), intent(out) :: hscale(:, :, :, :)
+   real(wp), intent(out) :: hscale(:, :)
 
-   integer :: isp, jsp, izp, jzp, ish, jsh, il, jl
+   integer :: isp, jsp, izp, jzp, ish, jsh, il, jl, iu, ju
    real(wp) :: den, enp, km
 
-   hscale(:, :, :, :) = 0.0_wp
+   hscale(:, :) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do jsp = 1, mol%nid
          jzp = mol%num(jsp)
+         ju = bas%ish_id(jsp)
          den = (get_pauling_en(izp) - get_pauling_en(jzp))**2
          do ish = 1, bas%nsh_id(isp)
             il = bas%cgto(ish, isp)%ang
             do jsh = 1, bas%nsh_id(jsp)
                jl = bas%cgto(jsh, jsp)%ang
-               if (self%valence(ish, isp) .and. self%valence(jsh, jsp)) then
+               if (self%valence(iu+ish) .and. self%valence(ju+jsh)) then
                   enp = 1.0_wp + enscale * den
                   km = self%kpair(jsp, isp) * self%kshell(jl, il) * enp
-               else if (self%valence(ish, isp) .and. .not.self%valence(jsh, jsp)) then
+               else if (self%valence(iu+ish) .and. .not.self%valence(ju+jsh)) then
                   km = 0.5_wp * (self%kshell(il, il) + kdiff)
-               else if (.not.self%valence(ish, isp) .and. self%valence(jsh, jsp)) then
+               else if (.not.self%valence(iu+ish) .and. self%valence(ju+jsh)) then
                   km = 0.5_wp * (self%kshell(jl, jl) + kdiff)
                else
                   km = kdiff
                end if
-               hscale(jsh, ish, jsp, isp) = km
+               hscale(ju+jsh, iu+ish) = km
             end do
          end do
       end do
@@ -810,16 +814,17 @@ subroutine get_selfenergy(self, mol, bas, selfenergy)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Self energy / atomic levels
-   real(wp), intent(out) :: selfenergy(:, :)
+   real(wp), intent(out) :: selfenergy(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   selfenergy(:, :) = 0.0_wp
+   selfenergy(:) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         selfenergy(ish, isp) = p_selfenergy(ish, izp)
+         selfenergy(iu+ish) = p_selfenergy(ish, izp)
       end do
    end do
 end subroutine get_selfenergy
@@ -834,15 +839,16 @@ subroutine get_cnshift(self, mol, bas, kcn)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Coordination number dependent shift
-   real(wp), intent(out) :: kcn(:, :)
+   real(wp), intent(out) :: kcn(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   kcn(:, :) = 0.0_wp
+   kcn(:) = 0.0_wp
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         kcn(ish, isp) = p_kcn(ish, izp)
+         kcn(iu+ish) = p_kcn(ish, izp)
       end do
    end do
 end subroutine get_cnshift
@@ -857,16 +863,17 @@ subroutine get_shpoly(self, mol, bas, shpoly)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Polynomial parameters for distant dependent scaleing
-   real(wp), intent(out) :: shpoly(:, :)
+   real(wp), intent(out) :: shpoly(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   shpoly(:, :) = 0.0_wp
+   shpoly(:) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         shpoly(ish, isp) = p_shpoly(bas%cgto(ish, isp)%ang, izp)
+         shpoly(iu+ish) = p_shpoly(bas%cgto(ish, isp)%ang, izp)
       end do
    end do
 end subroutine get_shpoly
@@ -880,19 +887,20 @@ subroutine get_reference_occ(self, mol, bas, refocc)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Reference occupation numbers
-   real(wp), intent(out) :: refocc(:, :)
+   real(wp), intent(out) :: refocc(:)
 
-   integer :: isp, izp, ish
+   integer :: isp, izp, ish, iu
 
-   refocc(:, :) = 0.0_wp
+   refocc(:) = 0.0_wp
 
    do isp = 1, mol%nid
       izp = mol%num(isp)
+      iu = bas%ish_id(isp)
       do ish = 1, bas%nsh_id(isp)
-         if (self%valence(ish, isp)) then
-            refocc(ish, isp) = reference_occ(bas%cgto(ish, isp)%ang, izp)
+         if (self%valence(iu+ish)) then
+            refocc(iu+ish) = reference_occ(bas%cgto(ish, isp)%ang, izp)
          else
-            refocc(ish, isp) = 0.0_wp
+            refocc(iu+ish) = 0.0_wp
          end if
       end do
    end do

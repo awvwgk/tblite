@@ -94,7 +94,7 @@ module tblite_xtb_calculator
    type, extends(tb_h0spec) :: param_h0spec
       type(param_record), pointer :: param => null()
       integer, pointer :: irc(:) => null()
-      logical, allocatable :: valence(:, :)
+      logical, allocatable :: valence(:)
    contains
       !> Generator for the self energy / atomic levels of the Hamiltonian
       procedure :: get_selfenergy
@@ -436,21 +436,23 @@ function new_param_h0spec(mol, param, irc) result(self)
    !> Instance of the Hamiltonian specification
    type(param_h0spec) :: self
 
-   integer :: isp, jsp, il, jl, ir, ish
+   integer :: isp, jsp, il, jl, ir, ish, iu
    integer :: ang_idx(0:4)
 
    self%param => param
    self%irc => irc
 
-   allocate(self%valence(maxval(param%record(irc)%nsh), mol%nid))
+   allocate(self%valence(sum(param%record(irc)%nsh)))
+   iu = 0
    do isp = 1, mol%nid
       ang_idx = 0
       ir = irc(isp)
       do ish = 1, param%record(ir)%nsh
          il = param%record(ir)%lsh(ish)
-         self%valence(ish, isp) = ang_idx(il) == 0
-         if (self%valence(ish, isp)) ang_idx(il) = ish
+         self%valence(iu+ish) = ang_idx(il) == 0
+         if (self%valence(iu+ish)) ang_idx(il) = ish
       end do
+      iu = iu + param%record(ir)%nsh
    end do
 end function new_param_h0spec
 
@@ -464,20 +466,22 @@ subroutine get_hscale(self, mol, bas, hscale)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Scaling parameters for the Hamiltonian elements
-   real(wp), intent(out) :: hscale(:, :, :, :)
+   real(wp), intent(out) :: hscale(:, :)
 
-   integer :: isp, jsp, izp, jzp, ish, jsh, il, jl, ir, jr
+   integer :: isp, jsp, izp, jzp, ish, jsh, il, jl, ir, jr, iu, ju
    real(wp) :: zi, zj, zij, den, enp, km
 
-   hscale(:, :, :, :) = 0.0_wp
+   hscale(:, :) = 0.0_wp
 
    associate(par => self%param%hamiltonian, record => self%param%record, irc => self%irc)
       do isp = 1, mol%nid
          izp = mol%num(isp)
          ir = irc(isp)
+         iu = bas%ish_id(isp)
          do jsp = 1, mol%nid
             jzp = mol%num(jsp)
             jr = irc(jsp)
+            ju = bas%ish_id(jsp)
             den = (record(ir)%en - record(jr)%en)**2
             do ish = 1, bas%nsh_id(isp)
                il = bas%cgto(ish, isp)%ang
@@ -486,17 +490,17 @@ subroutine get_hscale(self, mol, bas, hscale)
                   zi = record(ir)%slater(ish)
                   zj = record(jr)%slater(jsh)
                   zij = (2*sqrt(zi*zj)/(zi+zj))**par%wexp
-                  if (self%valence(ish, isp) .and. self%valence(jsh, jsp)) then
+                  if (self%valence(iu+ish) .and. self%valence(ju+jsh)) then
                      enp = 1.0_wp + par%enscale * den
                      km = par%kpair(jr, ir) * par%ksh(jl, il) * enp
-                  else if (self%valence(ish, isp) .and. .not.self%valence(jsh, jsp)) then
+                  else if (self%valence(iu+ish) .and. .not.self%valence(ju+jsh)) then
                      km = 0.5_wp * (par%ksh(il, il) + par%kpol)
-                  else if (.not.self%valence(ish, isp) .and. self%valence(jsh, jsp)) then
+                  else if (.not.self%valence(iu+ish) .and. self%valence(ju+jsh)) then
                      km = 0.5_wp * (par%ksh(jl, jl) + par%kpol)
                   else
                      km = par%kpol
                   end if
-                  hscale(jsh, ish, jsp, isp) = zij * km
+                  hscale(ju+jsh, iu+ish) = zij * km
                end do
             end do
          end do
@@ -514,17 +518,18 @@ subroutine get_selfenergy(self, mol, bas, selfenergy)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Self energy / atomic levels
-   real(wp), intent(out) :: selfenergy(:, :)
+   real(wp), intent(out) :: selfenergy(:)
 
-   integer :: isp, ir, ish
+   integer :: isp, ir, ish, iu
 
-   selfenergy(:, :) = 0.0_wp
+   selfenergy(:) = 0.0_wp
 
    associate(record => self%param%record, irc => self%irc)
       do isp = 1, mol%nid
          ir = irc(isp)
+         iu = bas%ish_id(isp)
          do ish = 1, bas%nsh_id(isp)
-            selfenergy(ish, isp) = record(ir)%levels(ish)
+            selfenergy(iu+ish) = record(ir)%levels(ish)
          end do
       end do
    end associate
@@ -540,17 +545,18 @@ subroutine get_cnshift(self, mol, bas, kcn)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Coordination number dependent shift
-   real(wp), intent(out) :: kcn(:, :)
+   real(wp), intent(out) :: kcn(:)
 
-   integer :: isp, ir, ish
+   integer :: isp, ir, ish, iu
 
-   kcn(:, :) = 0.0_wp
+   kcn(:) = 0.0_wp
 
    associate(record => self%param%record, irc => self%irc)
       do isp = 1, mol%nid
          ir = irc(isp)
+         iu = bas%ish_id(isp)
          do ish = 1, bas%nsh_id(isp)
-            kcn(ish, isp) = record(ir)%kcn(ish)
+            kcn(iu+ish) = record(ir)%kcn(ish)
          end do
       end do
    end associate
@@ -566,17 +572,18 @@ subroutine get_shpoly(self, mol, bas, shpoly)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Polynomial parameters for distant dependent scaleing
-   real(wp), intent(out) :: shpoly(:, :)
+   real(wp), intent(out) :: shpoly(:)
 
-   integer :: isp, ir, ish
+   integer :: isp, ir, ish, iu
 
-   shpoly(:, :) = 0.0_wp
+   shpoly(:) = 0.0_wp
 
    associate(record => self%param%record, irc => self%irc)
       do isp = 1, mol%nid
          ir = irc(isp)
+         iu = bas%ish_id(isp)
          do ish = 1, bas%nsh_id(isp)
-            shpoly(ish, isp) = record(ir)%shpoly(ish)
+            shpoly(iu+ish) = record(ir)%shpoly(ish)
          end do
       end do
    end associate
@@ -591,17 +598,18 @@ subroutine get_reference_occ(self, mol, bas, refocc)
    !> Basis set information
    type(basis_type), intent(in) :: bas
    !> Reference occupation numbers
-   real(wp), intent(out) :: refocc(:, :)
+   real(wp), intent(out) :: refocc(:)
 
-   integer :: isp, ir, ish
+   integer :: isp, ir, ish, iu
 
-   refocc(:, :) = 0.0_wp
+   refocc(:) = 0.0_wp
 
    associate(record => self%param%record, irc => self%irc)
       do isp = 1, mol%nid
          ir = irc(isp)
+         iu = bas%ish_id(isp)
          do ish = 1, bas%nsh_id(isp)
-            refocc(ish, isp) = merge(record(ir)%refocc(ish), 0.0_wp, self%valence(ish, isp))
+            refocc(iu+isp) = merge(record(ir)%refocc(ish), 0.0_wp, self%valence(iu+ish))
          end do
       end do
    end associate

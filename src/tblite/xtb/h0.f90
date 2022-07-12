@@ -35,21 +35,21 @@ module tblite_xtb_h0
 
    type, public :: tb_hamiltonian
       !> Atomic level information
-      real(wp), allocatable :: selfenergy(:, :)
+      real(wp), allocatable :: selfenergy(:)
       !> Coordination number dependence of the atomic levels
-      real(wp), allocatable :: kcn(:, :)
+      real(wp), allocatable :: kcn(:)
       !> Charge dependence of the atomic levels
-      real(wp), allocatable :: kq1(:, :)
+      real(wp), allocatable :: kq1(:)
       !> Charge dependence of the atomic levels
-      real(wp), allocatable :: kq2(:, :)
+      real(wp), allocatable :: kq2(:)
       !> Enhancement factor to scale the Hamiltonian elements
-      real(wp), allocatable :: hscale(:, :, :, :)
+      real(wp), allocatable :: hscale(:, :)
       !> Polynomial coefficients for distance dependent enhancement factor
-      real(wp), allocatable :: shpoly(:, :)
+      real(wp), allocatable :: shpoly(:)
       !> Atomic radius for polynomial enhancement
       real(wp), allocatable :: rad(:)
       !> Reference occupation numbers
-      real(wp), allocatable :: refocc(:, :)
+      real(wp), allocatable :: refocc(:)
    end type tb_hamiltonian
 
 
@@ -63,24 +63,24 @@ subroutine new_hamiltonian(self, mol, bas, spec)
    type(basis_type), intent(in) :: bas
    class(tb_h0spec), intent(in) :: spec
 
-   integer :: mshell
+   integer :: nshell
 
-   mshell = maxval(bas%nsh_id)
-   allocate(self%selfenergy(mshell, mol%nid), self%kcn(mshell, mol%nid), &
-      & self%kq1(mshell, mol%nid), self%kq2(mshell, mol%nid))
+   nshell = sum(bas%nsh_id)
+   allocate(self%selfenergy(nshell), self%kcn(nshell), &
+      & self%kq1(nshell), self%kq2(nshell))
    call spec%get_selfenergy(mol, bas, self%selfenergy)
    call spec%get_cnshift(mol, bas, self%kcn)
    call spec%get_q1shift(mol, bas, self%kq1)
    call spec%get_q2shift(mol, bas, self%kq2)
 
-   allocate(self%hscale(mshell, mshell, mol%nid, mol%nid))
+   allocate(self%hscale(nshell, nshell))
    call spec%get_hscale(mol, bas, self%hscale)
 
-   allocate(self%shpoly(mshell, mol%nid), self%rad(mol%nid))
+   allocate(self%shpoly(nshell), self%rad(mol%nid))
    call spec%get_rad(mol, bas, self%rad)
    call spec%get_shpoly(mol, bas, self%shpoly)
 
-   allocate(self%refocc(mshell, mol%nid))
+   allocate(self%refocc(nshell))
    call spec%get_reference_occ(mol, bas, self%refocc)
 end subroutine new_hamiltonian
 
@@ -96,57 +96,67 @@ subroutine get_selfenergy(h0, id, ish_at, nshell, cn, qat, selfenergy, dsedcn, d
    real(wp), intent(out), optional :: dsedcn(:)
    real(wp), intent(out), optional :: dsedq(:)
 
-   integer :: iat, izp, ish, ii
+   integer :: iat, izp, ish, ii, iu
 
    selfenergy(:) = 0.0_wp
    if (present(dsedcn)) dsedcn(:) = 0.0_wp
    if (present(dsedq)) dsedq(:) = 0.0_wp
+   iu = 0
    do iat = 1, size(id)
       izp = id(iat)
       ii = ish_at(iat)
       do ish = 1, nshell(izp)
-         selfenergy(ii+ish) = h0%selfenergy(ish, izp)
+         selfenergy(ii+ish) = h0%selfenergy(iu+ish)
       end do
+      iu = iu + nshell(izp)
    end do
    if (present(cn)) then
       if (present(dsedcn)) then
+         iu = 0
          do iat = 1, size(id)
             izp = id(iat)
             ii = ish_at(iat)
             do ish = 1, nshell(izp)
-               selfenergy(ii+ish) = selfenergy(ii+ish) - h0%kcn(ish, izp) * cn(iat)
-               dsedcn(ii+ish) = -h0%kcn(ish, izp)
+               selfenergy(ii+ish) = selfenergy(ii+ish) - h0%kcn(iu+ish) * cn(iat)
+               dsedcn(ii+ish) = -h0%kcn(iu+ish)
             end do
+            iu = iu + nshell(izp)
          end do
       else
+         iu = 0
          do iat = 1, size(id)
             izp = id(iat)
             ii = ish_at(iat)
             do ish = 1, nshell(izp)
-               selfenergy(ii+ish) = selfenergy(ii+ish) - h0%kcn(ish, izp) * cn(iat)
+               selfenergy(ii+ish) = selfenergy(ii+ish) - h0%kcn(iu+ish) * cn(iat)
             end do
+            iu = iu + nshell(izp)
          end do
       end if
    end if
    if (present(qat)) then
       if (present(dsedq)) then
+         iu = 0
          do iat = 1, size(id)
             izp = id(iat)
             ii = ish_at(iat)
             do ish = 1, nshell(izp)
                selfenergy(ii+ish) = selfenergy(ii+ish) &
-                  & - h0%kq1(ish, izp)*qat(iat) - h0%kq2(ish, izp)*qat(iat)**2
-               dsedq(ii+ish) = -h0%kq1(ish, izp) - h0%kq2(ish, izp)*2*qat(iat)
+                  & - h0%kq1(iu+ish)*qat(iat) - h0%kq2(iu+ish)*qat(iat)**2
+               dsedq(ii+ish) = -h0%kq1(iu+ish) - h0%kq2(iu+ish)*2*qat(iat)
             end do
+            iu = iu + nshell(izp)
          end do
       else
+         iu = 0
          do iat = 1, size(id)
             izp = id(iat)
             ii = ish_at(iat)
             do ish = 1, nshell(izp)
                selfenergy(ii+ish) = selfenergy(ii+ish) &
-                  & - h0%kq1(ish, izp)*qat(iat) - h0%kq2(ish, izp)*qat(iat)**2
+                  & - h0%kq1(iu+ish)*qat(iat) - h0%kq2(iu+ish)*qat(iat)**2
             end do
+            iu = iu + nshell(izp)
          end do
       end if
    end if
@@ -178,7 +188,7 @@ subroutine get_hamiltonian(mol, trans, list, bas, h0, selfenergy, overlap, dpint
    real(wp), intent(out) :: hamiltonian(:, :)
 
    integer :: iat, jat, izp, jzp, itr, k, img, inl
-   integer :: ish, jsh, is, js, ii, jj, iao, jao, nao, ij
+   integer :: ish, jsh, iu, ju, is, js, ii, jj, iao, jao, nao, ij
    real(wp) :: rr, r2, vec(3), cutoff2, hij, shpoly, dtmpj(3), qtmpj(6)
    real(wp), allocatable :: stmp(:), dtmpi(:, :), qtmpi(:, :)
 
@@ -192,15 +202,17 @@ subroutine get_hamiltonian(mol, trans, list, bas, h0, selfenergy, overlap, dpint
    !$omp parallel do schedule(runtime) default(none) &
    !$omp shared(mol, bas, trans, list, overlap, dpint, qpint, hamiltonian, h0, selfenergy) &
    !$omp private(iat, jat, izp, jzp, itr, is, js, ish, jsh, ii, jj, iao, jao, nao, ij, k) &
-   !$omp private(r2, vec, stmp, dtmpi, qtmpi, dtmpj, qtmpj, hij, shpoly, rr, inl, img)
+   !$omp private(r2, vec, stmp, dtmpi, qtmpi, dtmpj, qtmpj, hij, shpoly, rr, inl, img, iu, ju)
    do iat = 1, mol%nat
       izp = mol%id(iat)
+      iu = bas%ish_id(izp)
       is = bas%ish_at(iat)
       inl = list%inl(iat)
       do img = 1, list%nnl(iat)
          jat = list%nlat(img+inl)
          itr = list%nltr(img+inl)
          jzp = mol%id(jat)
+         ju = bas%ish_id(izp)
          js = bas%ish_at(jat)
          vec(:) = mol%xyz(:, iat) - mol%xyz(:, jat) - trans(:, itr)
          r2 = vec(1)**2 + vec(2)**2 + vec(3)**2
@@ -212,11 +224,11 @@ subroutine get_hamiltonian(mol, trans, list, bas, h0, selfenergy, overlap, dpint
                call multipole_cgto(bas%cgto(jsh, jzp), bas%cgto(ish, izp), &
                   & r2, vec, bas%intcut, stmp, dtmpi, qtmpi)
 
-               shpoly = (1.0_wp + h0%shpoly(ish, izp)*rr) &
-                  * (1.0_wp + h0%shpoly(jsh, jzp)*rr)
+               shpoly = (1.0_wp + h0%shpoly(iu+ish)*rr) &
+                  * (1.0_wp + h0%shpoly(ju+jsh)*rr)
 
                hij = 0.5_wp * (selfenergy(is+ish) + selfenergy(js+jsh)) &
-                  * h0%hscale(jsh, ish, jzp, izp) * shpoly
+                  * h0%hscale(ju+jzp, iu+izp) * shpoly
 
                nao = msao(bas%cgto(jsh, jzp)%ang)
                do iao = 1, msao(bas%cgto(ish, izp)%ang)
@@ -274,10 +286,11 @@ subroutine get_hamiltonian(mol, trans, list, bas, h0, selfenergy, overlap, dpint
 
    !$omp parallel do schedule(runtime) default(none) &
    !$omp shared(mol, bas, trans, cutoff2, overlap, dpint, qpint, hamiltonian, h0, selfenergy) &
-   !$omp private(iat, izp, itr, is, ish, jsh, ii, jj, iao, jao, nao, ij) &
+   !$omp private(iat, izp, itr, is, ish, jsh, ii, jj, iao, jao, nao, ij, iu) &
    !$omp private(r2, vec, stmp, dtmpi, qtmpi, hij, shpoly, rr)
    do iat = 1, mol%nat
       izp = mol%id(iat)
+      iu = bas%ish_id(izp)
       is = bas%ish_at(iat)
       vec(:) = 0.0_wp
       r2 = 0.0_wp
@@ -289,8 +302,8 @@ subroutine get_hamiltonian(mol, trans, list, bas, h0, selfenergy, overlap, dpint
             call multipole_cgto(bas%cgto(jsh, izp), bas%cgto(ish, izp), &
                & r2, vec, bas%intcut, stmp, dtmpi, qtmpi)
 
-            shpoly = (1.0_wp + h0%shpoly(ish, izp)*rr) &
-               * (1.0_wp + h0%shpoly(jsh, izp)*rr)
+            shpoly = (1.0_wp + h0%shpoly(iu+ish)*rr) &
+               * (1.0_wp + h0%shpoly(iu+jsh)*rr)
 
             hij = 0.5_wp * (selfenergy(is+ish) + selfenergy(is+jsh)) &
                * shpoly
@@ -352,7 +365,7 @@ subroutine get_hamiltonian_gradient(mol, trans, list, bas, h0, selfenergy, dsedc
    real(wp), intent(inout) :: sigma(:, :)
 
    integer :: iat, jat, izp, jzp, itr, img, inl, spin, nspin
-   integer :: ish, jsh, is, js, ii, jj, iao, jao, nao, ij
+   integer :: ish, jsh, is, js, ii, jj, iao, jao, nao, ij, iu, ju
    real(wp) :: rr, r2, vec(3), cutoff2, hij, shpoly, dshpoly, dG(3), hscale
    real(wp) :: sval, dcni, dcnj, dhdcni, dhdcnj, hpij, pij
    real(wp), allocatable :: stmp(:), dtmp(:, :), qtmp(:, :)
@@ -370,15 +383,18 @@ subroutine get_hamiltonian_gradient(mol, trans, list, bas, h0, selfenergy, dsedc
    !$omp shared(mol, bas, trans, h0, selfenergy, dsedcn, pot, pmat, xmat, list, nspin) &
    !$omp private(iat, jat, izp, jzp, itr, is, js, ish, jsh, ii, jj, iao, jao, nao, ij, spin, &
    !$omp& r2, vec, stmp, dtmp, qtmp, dstmp, ddtmpi, dqtmpi, ddtmpj, dqtmpj, hij, shpoly, &
-   !$omp& dshpoly, dG, dcni, dcnj, dhdcni, dhdcnj, hpij, rr, sval, hscale, pij, inl, img)
+   !$omp& dshpoly, dG, dcni, dcnj, dhdcni, dhdcnj, hpij, rr, sval, hscale, pij, inl, img, &
+   !$omp& iu, ju)
    do iat = 1, mol%nat
       izp = mol%id(iat)
+      iu = bas%ish_id(izp)
       is = bas%ish_at(iat)
       inl = list%inl(iat)
       do img = 1, list%nnl(iat)
          jat = list%nlat(img+inl)
          itr = list%nltr(img+inl)
          jzp = mol%id(jat)
+         ju = bas%ish_id(jzp)
          js = bas%ish_at(jat)
          if (iat == jat) cycle
          vec(:) = mol%xyz(:, iat) - mol%xyz(:, jat) - trans(:, itr)
@@ -392,13 +408,13 @@ subroutine get_hamiltonian_gradient(mol, trans, list, bas, h0, selfenergy, dsedc
                   & r2, vec, bas%intcut, stmp, dtmp, qtmp, dstmp, ddtmpj, dqtmpj, &
                   & ddtmpi, dqtmpi)
 
-               shpoly = (1.0_wp + h0%shpoly(ish, izp)*rr) &
-                  & * (1.0_wp + h0%shpoly(jsh, jzp)*rr)
-               dshpoly = ((1.0_wp + h0%shpoly(ish, izp)*rr)*h0%shpoly(jsh, jzp)*rr &
-                  & + (1.0_wp + h0%shpoly(jsh, jzp)*rr)*h0%shpoly(ish, izp)*rr) &
+               shpoly = (1.0_wp + h0%shpoly(iu+ish)*rr) &
+                  & * (1.0_wp + h0%shpoly(ju+jsh)*rr)
+               dshpoly = ((1.0_wp + h0%shpoly(iu+ish)*rr)*h0%shpoly(ju+jsh)*rr &
+                  & + (1.0_wp + h0%shpoly(ju+jsh)*rr)*h0%shpoly(iu+ish)*rr) &
                   & * 0.5_wp / r2
 
-               hscale = h0%hscale(jsh, ish, jzp, izp)
+               hscale = h0%hscale(ju+jsh, iu+ish)
                hij = 0.5_wp * (selfenergy(is+ish) + selfenergy(js+jsh)) * hscale
                dhdcni = dsedcn(is+ish) * shpoly * hscale
                dhdcnj = dsedcn(js+jsh) * shpoly * hscale
@@ -477,18 +493,19 @@ subroutine get_occupation(mol, bas, h0, nocc, n0at, n0sh)
    !> Reference occupation for each shell
    real(wp), intent(out) :: n0sh(:)
 
-   integer :: iat, ish, izp, ii
+   integer :: iat, ish, izp, ii, iu
 
    nocc = -mol%charge
    n0at(:) = 0.0_wp
    n0sh(:) = 0.0_wp
    do iat = 1, mol%nat
       izp = mol%id(iat)
+      iu = bas%ish_id(izp)
       ii = bas%ish_at(iat)
       do ish = 1, bas%nsh_id(izp)
-         nocc = nocc + h0%refocc(ish, izp)
-         n0at(iat) = n0at(iat) + h0%refocc(ish, izp)
-         n0sh(ii+ish) = n0sh(ii+ish) + h0%refocc(ish, izp)
+         nocc = nocc + h0%refocc(iu+ish)
+         n0at(iat) = n0at(iat) + h0%refocc(iu+ish)
+         n0sh(ii+ish) = n0sh(ii+ish) + h0%refocc(iu+ish)
       end do
    end do
 
